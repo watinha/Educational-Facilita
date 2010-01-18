@@ -1,42 +1,137 @@
 /*
   ***********************************************************
   *** Jetpack name: Educational Facilita                  ***
-  *** Version: 0.1                                        ***
+  *** Version: 0.2                                        ***
   *** Authors: Willian Massami Watanabe, Arnaldo Candido  ***
-  ***          Jr., Marcelo Adriano Am‚ncio e Matheus de  ***
+  ***          Jr., Marcelo Adriano Amancio e Matheus de  ***
   ***          Oliveira                                   ***
   *** Contact: watinha@gmail.com                          ***
-  *** Last changes: 14/01/2010                            ***
+  *** Last changes: 16/01/2010                            ***
   ***********************************************************
 */
 /*
   Development log:
     - Version 0.1: Readability Module 0.5 for textual extraction of the site
+    - Version 0.2: Separating objects (Educational_Facilita, ui_manager and readability) accordingly to its functionality and inserting the JQuery UI module dinamically on websites.
 */
 
 var Educational_Facilita = {
-  version: 0.1,
+  version: 0.2,
+  constants: {
+    DIALOG_LOADING_ID: "educational_facilita_loading"  
+  },
+  javascript_snippets: {
+    DIALOG_LOADING_JS: "$('#educational_facilita_loading').dialog({modal: true, height: 90, zIndex: 99999, draggable: false, hide: 'slide', closeOnEscape: false, dialogClass: 'educational_facilita_loading', resizable: false}); $('div.educational_facilita_loading').css({MozBoxShadow: '10px 10px 5px #333', position: 'fixed'}); $('span.ui-icon-closethick').remove(); $('div.ui-dialog-content').css({textAlign: 'center', padding: '20px'});",  
+    DIALOG_LOADING_HTML: <>
+      <div id="educational_facilita_loading" title="Aguarde...">
+        <img alt="carregando o Facilita Educational" src="http://localhost/~watinha/jquery/loading3.gif" />
+      </div>   
+    </>
+  },
+  initial_loading: function(){
+    var document_tab = jetpack.tabs.focused.contentDocument;
+    if($("#" + this.constants.DIALOG_LOADING_ID, document_tab).size() == 0)
+      document_tab.body.innerHTML += this.javascript_snippets.DIALOG_LOADING_HTML;
+
+    var script = document_tab.createElement("script");
+    script.type = "text/javascript";
+    script.innerHTML = this.javascript_snippets.DIALOG_LOADING_JS;
+
+    document_tab.getElementsByTagName("head")[0].appendChild(script);
+  },
   initialize: function(){
     var main_element = readability.grabArticle(jetpack.tabs.focused.contentDocument);
     
     // finishes if there is no main element
     if(main_element == null){
-      jetpack.notifications.show("N√£o√° texto suficiente para ser processado nessa p√ina.");
+      jetpack.notifications.show("N√£ h√° texto suficiente para ser processado nessa √gina.");
       return 0;
     }
       
-    $(jetpack.tabs.focused.contentDocument.body).append($(main_element).text());
+    $(jetpack.tabs.focused.contentDocument.body).append(readability.to_text(main_element));
+    ui_manager.include_jquery_ui(jetpack.tabs.focused.contentDocument); 
+
+    this.initial_loading();
   }
+
 };
 
-jetpack.statusBar.append({
-  html: "<button style='background-color:#000000;color:#FFFFFF;text-align:center;padding: 0px 10px'>Educational</button>",  
-  onReady: function(widget){
-    $(widget).click(function(){
-      Educational_Facilita.initialize();
-    });    
+/*
+ * JQuery UI inclusion object
+ * Object which inserts the Jquery UI files and dependencies from 
+ *  a specific server available on the web.
+ * Author: Willian Massami Watanabe
+ */
+
+var ui_manager = {
+  version: 0.1,
+  constants: {
+    JQUERY_ID: "educational_facilita_jquery",
+    JQUERYUI_ID: "educational_facilita_jqueryui",
+    JQUERYUI_CSS_ID: "educational_facilita_jqueryui_css",
+
+    JQUERY_URL: "http://localhost/~watinha/jquery/js/jquery-1.3.2.min.js",
+    JQUERYUI_URL: "http://localhost/~watinha/jquery/js/jquery-ui-1.7.2.custom.min.js",
+    JQUERYUI_CSS_URL: "http://localhost/~watinha/jquery/css/ui-lightness/jquery-ui-1.7.2.custom.css"
+  },
+
+  /*
+   * Function include_jquery_ui
+   *  - Include the Jquery UI dependencies into any website
+   *  - First checks if the page already contains the Jquery, Jquery UI, and Jquery UI CSS files
+   *  - Next it includes the required files through OnDemand Javascript Approach and AJAX for the
+   *  Javascript files, which require some sort of synchronization to be executed correctly.
+   *  - Finally it concludes by inserting the javascript Jquery UI code to be executed from the
+   *  website scope, rather than from the jetpack scope.
+  **/
+  include_jquery_ui: function(document_tab){
+    if($("#" + this.constants.JQUERY_ID, document_tab).size() == 0){
+      var jquery_element = document_tab.createElement("script");
+      var jqueryui_element = document_tab.createElement("script");
+      var jqueryui_css_element = document_tab.createElement("link");
+   
+      $(jquery_element).attr({
+        type: "text/javascript",
+        id: this.constants.JQUERY_ID
+      });
+
+      $(jqueryui_element).attr({
+        type: "text/javascript",
+        id: this.constants.JQUERYUI_ID
+      });
+
+      $(jqueryui_css_element).attr({
+        rel: "stylesheet",
+        type: "text/css",
+        id: this.constants.JQUERYUI_CSS_ID,
+        href: this.constants.JQUERYUI_CSS_URL
+      });
+
+      var head_element_tab = document_tab.getElementsByTagName("head")[0];
+      head_element_tab.appendChild(jquery_element);
+      head_element_tab.appendChild(jqueryui_element);
+      head_element_tab.appendChild(jqueryui_css_element);
+      
+      $.ajax({
+        type: "GET", 
+        async: false,
+        url: ui_manager.constants.JQUERY_URL,
+        success: function(data_jquery){
+          jquery_element.innerHTML = data_jquery;
+          $.ajax({
+            type: "GET", 
+            async: false,
+            url: ui_manager.constants.JQUERYUI_URL, 
+            success: function(data_jqueryui){
+              jqueryui_element.innerHTML = data_jqueryui;
+            }
+          });
+        }
+      });
+    }
   }
-});
+
+};
 
 /*
  * Readability. An Arc90 Lab Experiment. 
@@ -288,7 +383,7 @@ var readability = {
 		 * Things like preambles, content split by ads that we removed, etc.
 		**/
 		var articleContent        = document_tab.createElement("DIV");
-	        articleContent.id     = "readability-content";
+        articleContent.id     = "readability-content";
 		var siblingScoreThreshold = Math.max(10, topCandidate.readability.contentScore * 0.2);
 		var siblingNodes          = topCandidate.parentNode.childNodes;
 		for(var i=0, il=siblingNodes.length; i < il; i++)
@@ -420,6 +515,39 @@ var readability = {
 	},
   flagIsActive: function(flag) {
 		return (readability.flags & flag) > 0;
-	}
+	}, 
+
+ /*
+  *******************************************
+  * Function to_text                        *
+  *  - Removing textual content of script   *
+  *  and style elements from the visual     *
+  *  Display.                               * 
+  *******************************************
+  */
+  to_text: function(element){
+    $("script", element).each(function(count){
+      $(this).html("<!--" + $(this).html() + "-->");
+    }); 
+    $("style", element).each(function(count){
+      $(this).html("<!--" + $(this).html() + "-->");
+    });
+    return $(element).text();
+  }
 	
 };
+
+/*
+* Initializing the jetpack Educational Facilita.
+*  - Starting jetpack UI modifications for Educational Facilita 
+*  - Binding the implemented functions to the jetpack UI elements
+*/
+
+jetpack.statusBar.append({
+  html: "<button style='background-color:#000000;color:#FFFFFF;text-align:center;padding: 0px 10px'>Educational</button>",  
+  onReady: function(widget){
+    $(widget).click(function(){
+      Educational_Facilita.initialize();
+    });    
+  }
+});
