@@ -1,7 +1,7 @@
 /*
   ***********************************************************
   *** Jetpack name: Educational Facilita                  ***
-  *** Version: 0.2                                        ***
+  *** Version: 0.2.1                                        ***
   *** Authors: Willian Massami Watanabe, Arnaldo Candido  ***
   ***          Jr., Marcelo Adriano Amancio e Matheus de  ***
   ***          Oliveira                                   ***
@@ -13,125 +13,215 @@
   Development log:
     - Version 0.1: Readability Module 0.5 for textual extraction of the site
     - Version 0.2: Separating objects (Educational_Facilita, ui_manager and readability) accordingly to its functionality and inserting the JQuery UI module dinamically on websites.
+    - Version 0.2.1: Removing the JQuery UI functionality due to the limitations of the reuse of code of this library and also developing Overlay and Dialog functions to replace the UI components of the JQuery UI.
 */
 
 var Educational_Facilita = {
-  version: 0.2,
-  constants: {
-    DIALOG_LOADING_ID: "educational_facilita_loading"  
-  },
-  javascript_snippets: {
-    DIALOG_LOADING_JS: "$('#educational_facilita_loading').dialog({modal: true, height: 90, zIndex: 99999, draggable: false, hide: 'slide', closeOnEscape: false, dialogClass: 'educational_facilita_loading', resizable: false}); $('div.educational_facilita_loading').css({MozBoxShadow: '10px 10px 5px #333', position: 'fixed'}); $('span.ui-icon-closethick').remove(); $('div.ui-dialog-content').css({textAlign: 'center', padding: '20px'});",  
-    DIALOG_LOADING_HTML: <>
-      <div id="educational_facilita_loading" title="Aguarde...">
-        <img alt="carregando o Facilita Educational" src="http://localhost/~watinha/jquery/loading3.gif" />
-      </div>   
-    </>
-  },
-  initial_loading: function(){
-    var document_tab = jetpack.tabs.focused.contentDocument;
-    if($("#" + this.constants.DIALOG_LOADING_ID, document_tab).size() == 0)
-      document_tab.body.innerHTML += this.javascript_snippets.DIALOG_LOADING_HTML;
+  version: "0.2.1",
 
-    var script = document_tab.createElement("script");
-    script.type = "text/javascript";
-    script.innerHTML = this.javascript_snippets.DIALOG_LOADING_JS;
-
-    document_tab.getElementsByTagName("head")[0].appendChild(script);
-  },
   initialize: function(){
     var main_element = readability.grabArticle(jetpack.tabs.focused.contentDocument);
     
     // finishes if there is no main element
     if(main_element == null){
-      jetpack.notifications.show("Nã há texto suficiente para ser processado nessa �gina.");
+      jetpack.notifications.show("N");
       return 0;
     }
       
-    $(jetpack.tabs.focused.contentDocument.body).append(readability.to_text(main_element));
-    ui_manager.include_jquery_ui(jetpack.tabs.focused.contentDocument); 
-
-    this.initial_loading();
+    //$(jetpack.tabs.focused.contentDocument.body).append(readability.to_text(main_element));
+    var loading = new Loading_dialog();
   }
 
 };
 
-/*
- * JQuery UI inclusion object
- * Object which inserts the Jquery UI files and dependencies from 
- *  a specific server available on the web.
- * Author: Willian Massami Watanabe
- */
+/**
+  * Overlay Object.
+  *  - Inserts an overlay on the page in order to present 
+  *  unpreventable content to the user.
+  *  - Requires Jquery library.
+  *  
+  *  @params DIVElement and HashMap with the options
+  **/
+function Overlay (main_element, options){
+}
+Overlay.prototype.constants = {
+  OVERLAY_ID: "overlay_id"
+};
+Overlay.prototype.initialize = function(main_element, options){
+  options = options || {};
+  this.document_tab = jetpack.tabs.focused.contentDocument;
+  /*
+    option modal disables the background of the overlay in a way that the user
+    is required to interact with the overlay before going back to the page itself.
+  */
+  if (!options["modal"])
+    options["modal"] = "true";
+  /*
+    Option height used to define the height of the overlay box to be presented.
+    *** ONLY STATIC VALUES FOR THE MOMENT ***  
+  */
+  options["height"] = "50%";
+  /*
+    Option width to determine the width of the overlay box to be presented.
+    *** ONLY STATIC VALUES FOR THE MOMENT ***  
+  */
+  options["width"] = "50%";
+    
+  if (options["modal"] == "true"){
+    this.modal_div = this.document_tab.createElement("div");
+    $(this.modal_div).css({
+      width: "100%",
+      height: "100%",
+      position: "fixed",
+      top: 0,
+      left: 0,
+      zIndex: 99998,
+      opacity: 0.6,
+      backgroundColor: "#000000"
+    });
+  }
+    
+  this.overlay_div = this.document_tab.createElement("div");
+  $(this.overlay_div).css({
+    width: options["width"],
+    height: options["height"],
+    position: "fixed",
+    top: "15%",
+    left: "25%",
+    zIndex: 99999,
+    opacity: 0.9,
+    backgroundColor: "#FFFFFF",
+    MozBorderRadius: "10px",
+  });
+  $(this.overlay_div).append(main_element);
 
-var ui_manager = {
-  version: 0.1,
-  constants: {
-    JQUERY_ID: "educational_facilita_jquery",
-    JQUERYUI_ID: "educational_facilita_jqueryui",
-    JQUERYUI_CSS_ID: "educational_facilita_jqueryui_css",
+  this.container = this.document_tab.createElement("div");
+  $(this.container).attr({
+    id: this.constants.OVERLAY_ID
+  });
+  $(this.container).append(this.overlay_div);
 
-    JQUERY_URL: "http://localhost/~watinha/jquery/js/jquery-1.3.2.min.js",
-    JQUERYUI_URL: "http://localhost/~watinha/jquery/js/jquery-ui-1.7.2.custom.min.js",
-    JQUERYUI_CSS_URL: "http://localhost/~watinha/jquery/css/ui-lightness/jquery-ui-1.7.2.custom.css"
-  },
+  if(this.modal_div)
+    $(this.container).append(this.modal_div);
+
+  this.open();
+}
+Overlay.prototype.open = function(){
+  /*
+   * Verify if there is another current active overlay on the page
+   */
+  var active_overlay = $("#" + this.constants.OVERLAY_ID, this.document_tab);
+  if(active_overlay.size() != 0)
+    active_overlay.remove();
+
+  $(this.document_tab.body).append(this.container);
 
   /*
-   * Function include_jquery_ui
-   *  - Include the Jquery UI dependencies into any website
-   *  - First checks if the page already contains the Jquery, Jquery UI, and Jquery UI CSS files
-   *  - Next it includes the required files through OnDemand Javascript Approach and AJAX for the
-   *  Javascript files, which require some sort of synchronization to be executed correctly.
-   *  - Finally it concludes by inserting the javascript Jquery UI code to be executed from the
-   *  website scope, rather than from the jetpack scope.
+   * Generating the animation of the overlay opening
+   */
+  var overlay_height = $(this.overlay_div).css("height");
+
+  $(this.container).css({opacity: 0});
+  $(this.overlay_div).css({height: "0", opacity: 0});
+  
+  $(this.container).fadeTo(750, 1, function(){
+    $(this.childNodes[0]).animate({
+      height: overlay_height,
+      opacity: 1
+    }, 750);
+  });
+}
+Overlay.prototype.close = function(){
+  $(this.container).fadeTo(1000, 0, function(){
+    $(this).remove(); 
+  });
+}
+/**
+  * Dialog Object.
+  *  - Inserts a Dialog in the page which is quite similar 
+  *  to the Overlay with the difference that it can be closed
+  *  at any time by the user.
   **/
-  include_jquery_ui: function(document_tab){
-    if($("#" + this.constants.JQUERY_ID, document_tab).size() == 0){
-      var jquery_element = document_tab.createElement("script");
-      var jqueryui_element = document_tab.createElement("script");
-      var jqueryui_css_element = document_tab.createElement("link");
-   
-      $(jquery_element).attr({
-        type: "text/javascript",
-        id: this.constants.JQUERY_ID
-      });
+function Dialog(main_element, title, options){
+  this.initialize(main_element, options);
+  this.insert_dialog_bar(title);
+}
+Dialog.prototype = new Overlay;
+Dialog.prototype.insert_dialog_bar = function(title){
+  this.dialog_bar_div = this.document_tab.createElement("div");
+  $(this.dialog_bar_div).css({
+    width: "100%",
+    position: "absolute",
+    bottom: 0,
+    backgroundColor: "#EEEEEE",
+    padding: "10px 0",
+    fontFamily: "Arial"
+  });
+  
+  this.dialog_title = this.document_tab.createElement("h2");
+  this.dialog_title.innerHTML = title;
+  $(this.dialog_title).css({
+    textAlign: "left",
+    color: "#888888",
+    display: "inline",
+    fontWeight: "normal",
+    position: "relative",
+    left: "10px",
+    fontFamily: "Arial"
+  });
 
-      $(jqueryui_element).attr({
-        type: "text/javascript",
-        id: this.constants.JQUERYUI_ID
-      });
+  this.close_link = this.document_tab.createElement("a");
+  this.close_link.innerHTML = "Voltar ao Site";
+  $(this.close_link).attr({
+    href: "#"
+  });
+  $(this.close_link).css({
+    float: "right",
+    fontSize: "2em",
+    position: "relative",
+    right: "10px",
+    textDecoration: "none"
+  });
+  $(this.close_link).hover(function(){
+    $(this).css({color: "#666666"});
+  }, function(){
+    $(this).css({color: "#000000"});
+  });
+  var document_tab = this.document_tab;
+  $(this.close_link).click(function(){
+    $("#overlay_id", document_tab).fadeOut(1000, function(){
+      $(this).remove();
+    });
+    return false;
+  });
 
-      $(jqueryui_css_element).attr({
-        rel: "stylesheet",
-        type: "text/css",
-        id: this.constants.JQUERYUI_CSS_ID,
-        href: this.constants.JQUERYUI_CSS_URL
-      });
+  $(this.dialog_bar_div).append(this.dialog_title);
+  $(this.dialog_bar_div).append(this.close_link);
+  $(this.overlay_div).append(this.dialog_bar_div);
+}
 
-      var head_element_tab = document_tab.getElementsByTagName("head")[0];
-      head_element_tab.appendChild(jquery_element);
-      head_element_tab.appendChild(jqueryui_element);
-      head_element_tab.appendChild(jqueryui_css_element);
-      
-      $.ajax({
-        type: "GET", 
-        async: false,
-        url: ui_manager.constants.JQUERY_URL,
-        success: function(data_jquery){
-          jquery_element.innerHTML = data_jquery;
-          $.ajax({
-            type: "GET", 
-            async: false,
-            url: ui_manager.constants.JQUERYUI_URL, 
-            success: function(data_jqueryui){
-              jqueryui_element.innerHTML = data_jqueryui;
-            }
-          });
-        }
-      });
-    }
-  }
+/**
+  * Loading_dialog object
+  *  - A simple way to implement the initial loading overlay of
+  *  Educational Facilita, while the first textual processing 
+  *  operations havent finished yet.
+  */
+function Loading_dialog(){
+  var loading_overlay = jetpack.tabs.focused.contentDocument.createElement("img");
+  $(loading_overlay).attr({
+   id: "loading_overlay",
+   alt: "Loading",
+   src: "http://localhost/~watinha/jquery/loading3.gif"
+  });
+  $(loading_overlay).wrap("<div style='position:absolute;top:40%;width:100%;height:100%;text-align:center'></div>").after("<h2 style='font-size: 300%'>Aguarde...</h2>");
+  
+  this.initialize($(loading_overlay).parent());
 
-};
+  $(this.overlay_div).css({
+    MozBoxShadow: "10px 10px 5px #333"
+  });
+}
+Loading_dialog.prototype = new Overlay;
 
 /*
  * Readability. An Arc90 Lab Experiment. 
@@ -544,7 +634,7 @@ var readability = {
 */
 
 jetpack.statusBar.append({
-  html: "<button style='background-color:#000000;color:#FFFFFF;text-align:center;padding: 0px 10px'>Educational</button>",  
+html: "<span style='background-color:#3366FF;color:#FFFFFF;padding:0 15px;cursor: pointer;'> Educational</span>",
   onReady: function(widget){
     $(widget).click(function(){
       Educational_Facilita.initialize();
