@@ -1,12 +1,12 @@
 /*
   ***********************************************************
   *** Jetpack name: Educational Facilita                  ***
-  *** Version: 0.2.1                                        ***
+  *** Version: 0.3                                        ***
   *** Authors: Willian Massami Watanabe, Arnaldo Candido  ***
-  ***          Jr., Marcelo Adriano Amancio e Matheus de  ***
-  ***          Oliveira                                   ***
+  ***          Jr., Marcelo Adriano Amancio, Matheus de   ***
+  ***          Oliveira and Jose Augusto Costa Martim     ***
   *** Contact: watinha@gmail.com                          ***
-  *** Last changes: 16/01/2010                            ***
+  *** Last changes: 20/01/2010                            ***
   ***********************************************************
 */
 /*
@@ -14,24 +14,167 @@
     - Version 0.1: Readability Module 0.5 for textual extraction of the site
     - Version 0.2: Separating objects (Educational_Facilita, ui_manager and readability) accordingly to its functionality and inserting the JQuery UI module dinamically on websites.
     - Version 0.2.1: Removing the JQuery UI functionality due to the limitations of the reuse of code of this library and also developing Overlay and Dialog functions to replace the UI components of the JQuery UI.
+    - Version 0.3: Inserting Rembrandt functionalities through REST and AJAX. In this version it is expected the delivery of a functional prototype of the application.
 */
+var global_overlay;
 
 var Educational_Facilita = {
-  version: "0.2.1",
+  version: "0.3",
 
   initialize: function(){
-    var main_element = readability.grabArticle(jetpack.tabs.focused.contentDocument);
+    var document_current_tab = jetpack.tabs.focused.contentDocument;
+    global_overlay = new Loading_dialog(document_current_tab);
     
+    var main_element = readability.grabArticle(document_current_tab);
     // finishes if there is no main element
     if(main_element == null){
       jetpack.notifications.show("N");
       return 0;
     }
-      
-    //$(jetpack.tabs.focused.contentDocument.body).append(readability.to_text(main_element));
-    var loading = new Loading_dialog();
+
+    $(main_element).addClass("educational_facilita_main");
+
+    Rembrandt_service.call_rembrandt(readability.to_text(main_element), document_current_tab);
   }
 
+};
+
+/**
+  * Rembrandt_service object
+  *  - This object is responsible by the remote call through
+  *  REST to the Rembrandt server.
+  */
+var Rembrandt_service = {
+  constants: {
+    REMBRANDT_URL: "http://nilc.icmc.usp.br/porsimples/facilita/entidades.php"
+  },
+
+  regexps: {
+    REMOVE_SEGMENTS_ENTITIES: /\{|\}|\[|\]/g,
+    BEGGINING_BODY: "<BODY>",
+    END_BODY: "</BODY>"
+  },
+
+  call_rembrandt: function(text, document_current_tab){
+    var request = $.ajax({
+      type: "POST", 
+      data: ({texto: text}),
+      url: this.constants.REMBRANDT_URL,
+      success: function(response){
+        var response_div = document_current_tab.createElement("div");
+        $(response_div).css({
+          padding: "10px",
+          overflow: "auto"
+        });
+
+        response = Rembrandt_service.rembrandt_to_HTML(response, document_current_tab);
+
+        $(response_div).append(response);
+        $(document_current_tab.body).append(response_div);
+        global_overlay.close();
+        //global_overlay = new Dialog(response_div, document_current_tab, "Rembrandt Response", {height: "90%", width: "90%", left: "5%", top: "5%"});
+        
+        var current_tab;
+        for(i in jetpack.tabs){
+          if(jetpack.tabs[i].contentDocument == document_current_tab)
+            current_tab = i;
+        }
+        if (jetpack.tabs.focused != jetpack.tabs[current_tab]) 
+          jetpack.tabs[current_tab].raw.style.cssText = "-moz-apperance: none !important; color: #000000; background-color: rgb(255, 150, 0); border: 1px solid #000 !important;";
+        jetpack.notifications.show("O Facilita Educacional concluiu suas atividades na aba: " + document_current_tab.title);
+      }
+    });
+  },
+  
+  rembrandt_to_HTML: function(rembrandt_out, current_document){
+    var div = jetpack.tabs.focused.contentDocument.createElement("div");
+    $(div).html(rembrandt_out.replace(this.regexps.REMOVE_SEGMENTS_ENTITIES, " "));
+    $(div).find("EM").each(function(count){
+      var rembrandt_link = jetpack.tabs.focused.contentDocument.createElement("a");
+      $(rembrandt_link).attr({
+        id: ("rembrandt_link_" + count),
+        class: "rembrandt_link",
+        href: "#"
+      });
+      $(rembrandt_link).data("rembrandt_data", {
+        ID: ($(this).attr("ID")),
+        S: ($(this).attr("S")),
+        T: ($(this).attr("T")),
+        C1: ($(this).attr("C1")),
+        C2: ($(this).attr("C2")),
+        C: ($(this).attr("C"))
+      });
+      $(rembrandt_link).html($(this).html());
+      $(rembrandt_link).click(function(){
+
+        var container_div = jetpack.tabs.focused.contentDocument.createElement("div");
+        $(container_div).css({
+          padding: "15px"
+        });
+
+        var title = jetpack.tabs.focused.contentDocument.createElement("h2");
+        $(title).html($(this).text());
+
+        var ul_element = jetpack.tabs.focused.contentDocument.createElement("ul");
+
+        var li_ID = jetpack.tabs.focused.contentDocument.createElement("li");
+        $(li_ID).html($(this).data("rembrandt_data").ID);
+        $(ul_element).append(li_ID);
+
+        var li_S = jetpack.tabs.focused.contentDocument.createElement("li");
+        $(li_S).html($(this).data("rembrandt_data").S);
+        $(ul_element).append(li_S);
+
+        var li_T = jetpack.tabs.focused.contentDocument.createElement("li");
+        $(li_T).html($(this).data("rembrandt_data").T);
+        $(ul_element).append(li_T);
+
+        var li_C1 = jetpack.tabs.focused.contentDocument.createElement("li");
+        $(li_C1).html($(this).data("rembrandt_data").C1);
+        $(ul_element).append(li_C1);
+
+        var li_C2 = jetpack.tabs.focused.contentDocument.createElement("li");
+        $(li_C2).html($(this).data("rembrandt_data").C2);
+        $(ul_element).append(li_C2);
+
+        var li_C = jetpack.tabs.focused.contentDocument.createElement("li");
+        $(li_C).html($(this).data("rembrandt_data").C);
+        $(ul_element).append(li_C);
+
+        $(container_div).append(title).append(ul_element);
+        
+        global_overlay = new Dialog(container_div, current_document, $(this).text(), {height: "70%", width: "70%", top: "15%", left: "15%"});
+        
+        return false;
+      });
+      //$(this).replaceWith(rembrandt_link);
+      $(current_document.body).append(rembrandt_link);
+    });
+
+    return $(div).html();
+  }
+};
+
+/**
+  * Textual_elaboration_service object
+  *  - This object will interface each and every requests that
+  *  are to be made to the Textual elaboration methods implemented.
+  */
+var Textual_elaboration_service = {
+  
+};
+
+/**
+  * HTML_handler
+  *  - This object will execute integration of textual marked annotations
+  *  and the HTML of the page itself. It will receive the responses of services
+  *  and turn them into HTML dialog elements for the presentation.
+  */
+var HTML_handler = {
+  constants: {},
+  merge_htmls: function(html, main_element){
+    
+  }
 };
 
 /**
@@ -42,14 +185,14 @@ var Educational_Facilita = {
   *  
   *  @params DIVElement and HashMap with the options
   **/
-function Overlay (main_element, options){
+function Overlay (main_element, document_tab, options){
 }
 Overlay.prototype.constants = {
   OVERLAY_ID: "overlay_id"
 };
-Overlay.prototype.initialize = function(main_element, options){
+Overlay.prototype.initialize = function(main_element, document_tab, options){
   options = options || {};
-  this.document_tab = jetpack.tabs.focused.contentDocument;
+  this.document_tab = document_tab;
   /*
     option modal disables the background of the overlay in a way that the user
     is required to interact with the overlay before going back to the page itself.
@@ -58,14 +201,26 @@ Overlay.prototype.initialize = function(main_element, options){
     options["modal"] = "true";
   /*
     Option height used to define the height of the overlay box to be presented.
-    *** ONLY STATIC VALUES FOR THE MOMENT ***  
   */
-  options["height"] = "50%";
+  if (!options["height"])
+    options["height"] = "50%";
   /*
     Option width to determine the width of the overlay box to be presented.
-    *** ONLY STATIC VALUES FOR THE MOMENT ***  
   */
-  options["width"] = "50%";
+  if (!options["width"])
+    options["width"] = "50%";
+
+  /*
+    Option TOP to determine the position of the element
+  */
+  if (!options["top"])
+    options["top"] = "15%";
+
+  /*
+    Option LEFT to determine the position of the element
+  */
+  if (!options["left"])
+    options["left"] = "25%";
     
   if (options["modal"] == "true"){
     this.modal_div = this.document_tab.createElement("div");
@@ -86,12 +241,13 @@ Overlay.prototype.initialize = function(main_element, options){
     width: options["width"],
     height: options["height"],
     position: "fixed",
-    top: "15%",
-    left: "25%",
+    top: options["top"],
+    left: options["left"],
     zIndex: 99999,
     opacity: 0.9,
     backgroundColor: "#FFFFFF",
     MozBorderRadius: "10px",
+    overflow: "auto"
   });
   $(this.overlay_div).append(main_element);
 
@@ -99,6 +255,7 @@ Overlay.prototype.initialize = function(main_element, options){
   $(this.container).attr({
     id: this.constants.OVERLAY_ID
   });
+  $(this.container).data('overlay', {caraca: this});
   $(this.container).append(this.overlay_div);
 
   if(this.modal_div)
@@ -111,8 +268,11 @@ Overlay.prototype.open = function(){
    * Verify if there is another current active overlay on the page
    */
   var active_overlay = $("#" + this.constants.OVERLAY_ID, this.document_tab);
-  if(active_overlay.size() != 0)
-    active_overlay.remove();
+  if(active_overlay.size() != 0){
+    active_overlay.fadeOut(1000, function(){
+      $(this).remove();
+    });
+  }
 
   $(this.document_tab.body).append(this.container);
 
@@ -142,8 +302,8 @@ Overlay.prototype.close = function(){
   *  to the Overlay with the difference that it can be closed
   *  at any time by the user.
   **/
-function Dialog(main_element, title, options){
-  this.initialize(main_element, options);
+function Dialog(main_element, document_tab, title, options){
+  this.initialize(main_element, document_tab, options);
   this.insert_dialog_bar(title);
 }
 Dialog.prototype = new Overlay;
@@ -153,7 +313,7 @@ Dialog.prototype.insert_dialog_bar = function(title){
     width: "100%",
     position: "absolute",
     bottom: 0,
-    backgroundColor: "#EEEEEE",
+    backgroundColor: "#DDDDDD",
     padding: "10px 0",
     fontFamily: "Arial"
   });
@@ -162,7 +322,7 @@ Dialog.prototype.insert_dialog_bar = function(title){
   this.dialog_title.innerHTML = title;
   $(this.dialog_title).css({
     textAlign: "left",
-    color: "#888888",
+    color: "#555555",
     display: "inline",
     fontWeight: "normal",
     position: "relative",
@@ -180,7 +340,8 @@ Dialog.prototype.insert_dialog_bar = function(title){
     fontSize: "2em",
     position: "relative",
     right: "10px",
-    textDecoration: "none"
+    textDecoration: "none",
+    color: "#000000"
   });
   $(this.close_link).hover(function(){
     $(this).css({color: "#666666"});
@@ -195,6 +356,13 @@ Dialog.prototype.insert_dialog_bar = function(title){
     return false;
   });
 
+  /**
+    * Adding some colors to the overlay border
+    */
+  $(this.overlay_div).css({
+    borderTop: "solid 5px #FF9900",
+  });
+
   $(this.dialog_bar_div).append(this.dialog_title);
   $(this.dialog_bar_div).append(this.close_link);
   $(this.overlay_div).append(this.dialog_bar_div);
@@ -206,19 +374,22 @@ Dialog.prototype.insert_dialog_bar = function(title){
   *  Educational Facilita, while the first textual processing 
   *  operations havent finished yet.
   */
-function Loading_dialog(){
-  var loading_overlay = jetpack.tabs.focused.contentDocument.createElement("img");
+function Loading_dialog(document_tab){
+  var loading_overlay = document_tab.createElement("img");
   $(loading_overlay).attr({
-   id: "loading_overlay",
-   alt: "Loading",
-   src: "http://localhost/~watinha/jquery/loading3.gif"
+    id: "loading_overlay",
+    alt: "Carregando",
+    src: "http://localhost/~watinha/jquery/loading3.gif"
   });
-  $(loading_overlay).wrap("<div style='position:absolute;top:40%;width:100%;height:100%;text-align:center'></div>").after("<h2 style='font-size: 300%'>Aguarde...</h2>");
+
+ $(loading_overlay).wrap("<div style='position:absolute;top:40%;width:100%;text-align:center'></div>").after("<h2 style='font-size: 300%'>Aguarde...</h2>");
   
-  this.initialize($(loading_overlay).parent());
+  this.initialize($(loading_overlay).parent(), document_tab);
 
   $(this.overlay_div).css({
-    MozBoxShadow: "10px 10px 5px #333"
+    MozBoxShadow: "10px 10px 5px #333",
+    borderTop: "solid 10px #FF9900",
+    borderBottom: "solid 10px #AAAAAA"
   });
 }
 Loading_dialog.prototype = new Overlay;
@@ -634,10 +805,13 @@ var readability = {
 */
 
 jetpack.statusBar.append({
-html: "<span style='background-color:#3366FF;color:#FFFFFF;padding:0 15px;cursor: pointer;'> Educational</span>",
+html: "<span style='background-color:#EE9911;color:#FFFFFF;padding:0 15px;cursor: pointer;'> Educational</span>",
   onReady: function(widget){
     $(widget).click(function(){
       Educational_Facilita.initialize();
     });    
   }
 });
+jetpack.tabs.onFocus(function(){
+  this.raw.style.cssText = "";
+}); 
