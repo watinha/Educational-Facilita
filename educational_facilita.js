@@ -20,7 +20,9 @@ var global_overlay;
 
 var Educational_Facilita = {
   version: "0.3",
-
+  constants: {
+    MAIN_ELEMENT_CLASS: "educational_facilita_main"
+  },
   initialize: function(){
     var document_current_tab = jetpack.tabs.focused.contentDocument;
     global_overlay = new Loading_dialog(document_current_tab);
@@ -32,8 +34,7 @@ var Educational_Facilita = {
       return 0;
     }
 
-    $(main_element).addClass("educational_facilita_main");
-
+    $(main_element).addClass(this.constants.MAIN_ELEMENT_CLASS);
     Rembrandt_service.call_rembrandt(readability.to_text(main_element), document_current_tab);
   }
 
@@ -46,7 +47,10 @@ var Educational_Facilita = {
   */
 var Rembrandt_service = {
   constants: {
-    REMBRANDT_URL: "http://nilc.icmc.usp.br/porsimples/facilita/entidades.php"
+    REMBRANDT_URL: "http://nilc.icmc.usp.br/porsimples/facilita/entidades.php",
+    REMBRANDT_LINKS_ID: "rembrandt_link_",
+    REMBRANDT_LINKS_CLASS: "rembrandt_link",
+    REMBRANDT_LINKS_DATA: "rembrandt_data"
   },
 
   regexps: {
@@ -69,8 +73,10 @@ var Rembrandt_service = {
 
         response = Rembrandt_service.rembrandt_to_HTML(response, document_current_tab);
 
+        HTML_handler.merge_htmls(response, document_current_tab);
+
         $(response_div).append(response);
-        $(document_current_tab.body).append(response_div);
+        //$(document_current_tab.body).append(response_div);
         global_overlay.close();
         //global_overlay = new Dialog(response_div, document_current_tab, "Rembrandt Response", {height: "90%", width: "90%", left: "5%", top: "5%"});
         
@@ -92,17 +98,18 @@ var Rembrandt_service = {
     $(div).find("EM").each(function(count){
       var rembrandt_link = jetpack.tabs.focused.contentDocument.createElement("a");
       $(rembrandt_link).attr({
-        id: ("rembrandt_link_" + count),
-        class: "rembrandt_link",
+        id: (Rembrandt_service.constants.REMBRANDT_LINKS_ID + count),
+        class: (Rembrandt_service.constants.REMBRANDT_LINKS_CLASS),
         href: "#"
       });
-      $(rembrandt_link).data("rembrandt_data", {
+      $(rembrandt_link).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA ,{
         ID: ($(this).attr("ID")),
         S: ($(this).attr("S")),
         T: ($(this).attr("T")),
         C1: ($(this).attr("C1")),
         C2: ($(this).attr("C2")),
-        C: ($(this).attr("C"))
+        C: ($(this).attr("C")),
+        WK: ($(this).attr("WK"))
       });
       $(rembrandt_link).html($(this).html());
       $(rembrandt_link).click(function(){
@@ -118,28 +125,32 @@ var Rembrandt_service = {
         var ul_element = jetpack.tabs.focused.contentDocument.createElement("ul");
 
         var li_ID = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_ID).html($(this).data("rembrandt_data").ID);
+        $(li_ID).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).ID);
         $(ul_element).append(li_ID);
 
         var li_S = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_S).html($(this).data("rembrandt_data").S);
+        $(li_S).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).S);
         $(ul_element).append(li_S);
 
         var li_T = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_T).html($(this).data("rembrandt_data").T);
+        $(li_T).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).T);
         $(ul_element).append(li_T);
 
         var li_C1 = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_C1).html($(this).data("rembrandt_data").C1);
+        $(li_C1).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C1);
         $(ul_element).append(li_C1);
 
         var li_C2 = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_C2).html($(this).data("rembrandt_data").C2);
+        $(li_C2).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C2);
         $(ul_element).append(li_C2);
 
         var li_C = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_C).html($(this).data("rembrandt_data").C);
+        $(li_C).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C);
         $(ul_element).append(li_C);
+
+        var li_WK = jetpack.tabs.focused.contentDocument.createElement("li");
+        $(li_WK).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).WK);
+        $(ul_element).append(li_WK);
 
         $(container_div).append(title).append(ul_element);
         
@@ -147,11 +158,10 @@ var Rembrandt_service = {
         
         return false;
       });
-      //$(this).replaceWith(rembrandt_link);
-      $(current_document.body).append(rembrandt_link);
+      $(this).replaceWith(rembrandt_link);
     });
 
-    return $(div).html();
+    return div;
   }
 };
 
@@ -172,8 +182,47 @@ var Textual_elaboration_service = {
   */
 var HTML_handler = {
   constants: {},
-  merge_htmls: function(html, main_element){
-    
+  merge_htmls: function(html, current_document){
+    var main_element = $("." + Educational_Facilita.constants.MAIN_ELEMENT_CLASS);
+    var entity_names = $("a." + (Rembrandt_service.constants.REMBRANDT_LINKS_CLASS), html);
+    var cont_entity = 0;
+    /*
+      Looking for elements inside the main element
+    */
+    for (var nodeIndex = 0; (node = current_document.getElementsByTagName('*')[nodeIndex]); nodeIndex++){
+      /*
+        Looking for text nodes to find the expression to be remarked
+      */
+      for (var child_index = 0; child_index < node.childNodes.length; child_index++){
+        if (node.childNodes[child_index].nodeType == 3){
+          var node_text = node.childNodes[child_index].nodeValue;
+          if (node_text.search($(entity_names.get(cont_entity)).text()) > -1){
+            if (node.nodeName == "A"){
+              if(! $(node).hasClass(Rembrandt_service.constants.REMBRANDT_LINKS_CLASS))
+                cont_entity++;
+              if (cont_entity == entity_names.size())
+                return ;
+            }else{
+              entity_str_index = node_text.search($(entity_names.get(cont_entity)).text());
+              var begin_text = current_document.createTextNode(node_text.substring(0, entity_str_index));
+              var end_text = current_document.createTextNode(node_text.substring(entity_str_index + $(entity_names.get(cont_entity)).text().length), node_text.length);
+
+              node.childNodes[child_index].parentNode.replaceChild(end_text, node.childNodes[child_index]);
+              end_text.parentNode.insertBefore(begin_text, end_text);
+              end_text.parentNode.insertBefore(entity_names[cont_entity], end_text);
+
+              //$(node.childNodes[child_index]).replaceWith(begin_text).after(entity_names.get(cont_entity)).after(end_text);
+
+              //child_index++; // there is no need to recheck the begin of the text node, since the entity_names are ordered
+              //nodeIndex++; // now there ir one new non textual element in the tree so we need to skip it
+              cont_entity++; // keeping an eye for the remaining named entities
+              if(cont_entity == entity_names.size())
+                return ;
+            }
+          }//if 
+        }// if
+      }// text nodes 
+    }// all elements in the main element
   }
 };
 
@@ -360,7 +409,7 @@ Dialog.prototype.insert_dialog_bar = function(title){
     * Adding some colors to the overlay border
     */
   $(this.overlay_div).css({
-    borderTop: "solid 5px #FF9900",
+    borderTop: "solid 10px #FF9900",
   });
 
   $(this.dialog_bar_div).append(this.dialog_title);
@@ -788,10 +837,10 @@ var readability = {
   */
   to_text: function(element){
     $("script", element).each(function(count){
-      $(this).html("<!--" + $(this).html() + "-->");
+      this.innerHTML = "<!--" + this.innerHTML + "-->";
     }); 
     $("style", element).each(function(count){
-      $(this).html("<!--" + $(this).html() + "-->");
+      this.innerHTML = "<!--" + this.innerHTML + "-->";
     });
     return $(element).text();
   }
