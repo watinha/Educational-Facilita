@@ -1,12 +1,12 @@
 /*
   ***********************************************************
   *** Jetpack name: Educational Facilita                  ***
-  *** Version: 0.3                                        ***
+  *** Version: 0.4                                        ***
   *** Authors: Willian Massami Watanabe, Arnaldo Candido  ***
   ***          Jr., Marcelo Adriano Amancio, Matheus de   ***
   ***          Oliveira and Jose Augusto Costa Martim     ***
   *** Contact: watinha@gmail.com                          ***
-  *** Last changes: 20/01/2010                            ***
+  *** Last changes: 26/01/2010                            ***
   ***********************************************************
 */
 /*
@@ -15,6 +15,7 @@
     - Version 0.2: Separating objects (Educational_Facilita, ui_manager and readability) accordingly to its functionality and inserting the JQuery UI module dinamically on websites.
     - Version 0.2.1: Removing the JQuery UI functionality due to the limitations of the reuse of code of this library and also developing Overlay and Dialog functions to replace the UI components of the JQuery UI.
     - Version 0.3: Inserting Rembrandt functionalities through REST and AJAX. In this version it is expected the delivery of a functional prototype of the application.
+    - Version 0.4: Adding the Lexical Elaboration functionality and fixing some issues in the presentation of the informations.
 */
 var global_overlay;
 
@@ -26,16 +27,27 @@ var Educational_Facilita = {
   initialize: function(){
     var document_current_tab = jetpack.tabs.focused.contentDocument;
     global_overlay = new Loading_dialog(document_current_tab);
-    
-    var main_element = readability.grabArticle(document_current_tab);
-    // finishes if there is no main element
-    if(main_element == null){
-      jetpack.notifications.show("N");
-      return 0;
-    }
 
-    $(main_element).addClass(this.constants.MAIN_ELEMENT_CLASS);
-    Rembrandt_service.call_rembrandt(readability.to_text(main_element), document_current_tab);
+    try{
+      var main_element;
+      if ($("." + this.constants.MAIN_ELEMENT_CLASS, document_current_tab).size() == 0){
+        main_element = readability.grabArticle(document_current_tab);
+        $(main_element).addClass(this.constants.MAIN_ELEMENT_CLASS);
+      }else
+        main_element = $("." + this.constants.MAIN_ELEMENT_CLASS, document_current_tab).get(0); 
+
+      // finishes if there is no main element
+      if(main_element == null){
+        jetpack.notifications.show("N");
+        return 0;
+      }
+      //jetpack.notifications.show(readability.to_text(main_element));
+      //global_overlay = new Dialog($(document_current_tab.createElement("div")).css({padding: "15px"}).append(readability.to_text(main_element)), document_current_tab, "readability result", {height: "90%", width: "90%", top: "5%", left: "5%"});
+      Rembrandt_service.call_rembrandt(readability.to_text(main_element), document_current_tab);
+      //Textual_elaboration_service.call_lexical_elaboration(readability.to_text(main_element), document_current_tab);
+    }catch(e){
+      //jetpack.notifications.show("Problemas 2 :: " + e);
+    }
   }
 
 };
@@ -64,36 +76,49 @@ var Rembrandt_service = {
       type: "POST", 
       data: ({texto: text}),
       url: this.constants.REMBRANDT_URL,
+      error: function(XMLHttpRequest, textStatus){
+        Error_dialog(document_current_tab);
+      },
       success: function(response){
+
+        // Calling the Textual_elaboration_service  
+        Textual_elaboration_service.call_lexical_elaboration(text, document_current_tab);
+
+        if (!Rembrandt_service.check_consistency(text, response)){
+          global_overlay = new Error_dialog(document_current_tab);
+          return ;
+        }
         var response_div = document_current_tab.createElement("div");
         $(response_div).css({
           padding: "10px",
-          overflow: "auto"
+          overflow: "auto" 
         });
+
+        //global_overlay.close();
 
         response = Rembrandt_service.rembrandt_to_HTML(response, document_current_tab);
 
-        HTML_handler.merge_htmls(response, document_current_tab);
+        try{
+          HTML_handler.merge_htmls(response, document_current_tab);
+        }catch(ex){
+          //jetpack.notifications.show("Erro 1 :: " + ex);
+        }
 
-        $(response_div).append(response);
-        //$(document_current_tab.body).append(response_div);
-        global_overlay.close();
+        //$(response_div).append(response);
         //global_overlay = new Dialog(response_div, document_current_tab, "Rembrandt Response", {height: "90%", width: "90%", left: "5%", top: "5%"});
         
-        var current_tab;
-        for(i in jetpack.tabs){
-          if(jetpack.tabs[i].contentDocument == document_current_tab)
-            current_tab = i;
-        }
-        if (jetpack.tabs.focused != jetpack.tabs[current_tab]) 
-          jetpack.tabs[current_tab].raw.style.cssText = "-moz-apperance: none !important; color: #000000; background-color: rgb(255, 150, 0); border: 1px solid #000 !important;";
-        jetpack.notifications.show("O Facilita Educacional concluiu suas atividades na aba: " + document_current_tab.title);
+
       }
     });
+  },
+
+  check_consistency: function(entry_text, rembrandt_text){
+    return (entry_text.length<rembrandt_text.length?true:false);
   },
   
   rembrandt_to_HTML: function(rembrandt_out, current_document){
     var div = jetpack.tabs.focused.contentDocument.createElement("div");
+    rembrandt_out = rembrandt_out.replace("UTF-8", " ");
     $(div).html(rembrandt_out.replace(this.regexps.REMOVE_SEGMENTS_ENTITIES, " "));
     $(div).find("EM").each(function(count){
       var rembrandt_link = jetpack.tabs.focused.contentDocument.createElement("a");
@@ -102,6 +127,11 @@ var Rembrandt_service = {
         class: (Rembrandt_service.constants.REMBRANDT_LINKS_CLASS),
         href: "#"
       });
+      $(rembrandt_link).css({
+        backgroundColor: "#FFAA66",
+        color: "#000000", 
+        fontSize: "1em"
+      });
       $(rembrandt_link).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA ,{
         ID: ($(this).attr("ID")),
         S: ($(this).attr("S")),
@@ -109,52 +139,50 @@ var Rembrandt_service = {
         C1: ($(this).attr("C1")),
         C2: ($(this).attr("C2")),
         C: ($(this).attr("C")),
-        WK: ($(this).attr("WK"))
+        WK: ($(this).attr("WK")),
+        TG: ($(this).attr("TG"))
       });
       $(rembrandt_link).html($(this).html());
       $(rembrandt_link).click(function(){
+
+        if (global_overlay)
+          global_overlay.close();
 
         var container_div = jetpack.tabs.focused.contentDocument.createElement("div");
         $(container_div).css({
           padding: "15px"
         });
-
-        var title = jetpack.tabs.focused.contentDocument.createElement("h2");
-        $(title).html($(this).text());
-
-        var ul_element = jetpack.tabs.focused.contentDocument.createElement("ul");
-
-        var li_ID = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_ID).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).ID);
-        $(ul_element).append(li_ID);
-
-        var li_S = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_S).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).S);
-        $(ul_element).append(li_S);
-
-        var li_T = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_T).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).T);
-        $(ul_element).append(li_T);
-
-        var li_C1 = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_C1).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C1);
-        $(ul_element).append(li_C1);
-
-        var li_C2 = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_C2).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C2);
-        $(ul_element).append(li_C2);
-
-        var li_C = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_C).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C);
-        $(ul_element).append(li_C);
-
-        var li_WK = jetpack.tabs.focused.contentDocument.createElement("li");
-        $(li_WK).html($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).WK);
-        $(ul_element).append(li_WK);
-
-        $(container_div).append(title).append(ul_element);
         
-        global_overlay = new Dialog(container_div, current_document, $(this).text(), {height: "70%", width: "70%", top: "15%", left: "15%"});
+        if ($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).WK){
+          var div_wiki = jetpack.tabs.focused.contentDocument.createElement("div");
+          $(div_wiki).css({
+            overflow: "auto",
+            height: "100%",
+            position: "absolute",
+            top: "0"
+          });
+          $(div_wiki).html("Aguarde, carregando dados da Wikipedia...").appendTo(container_div);
+          var loading_overlay = jetpack.tabs.focused.contentDocument.createElement("img");
+          $(loading_overlay).attr({
+            id: "loading_overlay",
+            alt: "Carregando",
+            src: "http://vinho.intermidia.icmc.usp.br/watinha/Educational-Facilita/loading3.gif"
+          });
+          $(div_wiki).append(loading_overlay);
+          global_overlay = new Dialog(container_div, current_document, $(this).text(), {height: "70%", width: "70%", top: "15%", left: "15%"});
+          Wikipedia_service.get_main_content($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).WK, div_wiki);
+        }else{
+          if (global_overlay && global_overlay.overlay_div && $($("p", global_overlay.overlay_div).get(0)).text() == $(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C){
+            global_overlay.close();
+            global_overlay = false;
+            return false;
+          }
+          var p_desc = jetpack.tabs.focused.contentDocument.createElement("p");
+          $(p_desc).text($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C).appendTo(container_div).css({
+            fontSize: "1.5em"
+          });
+          global_overlay = new Tooltip(container_div, current_document, this);
+        }
         
         return false;
       });
@@ -166,12 +194,138 @@ var Rembrandt_service = {
 };
 
 /**
+  * Wikipedia_service Object  
+  *  - A simple way of retrieving any relevant data that 
+  *  describes an entity
+  */
+
+var Wikipedia_service = {
+  constants: {
+    WIKIPEDIA_URL: "http://pt.wikipedia.org/wiki/",
+    MAIN_CONTENT_ID: "bodyContent"
+  }, 
+  get_main_content: function(entity, update_element){
+  
+    $.ajax({
+      type: "GET",
+      url: (Wikipedia_service.constants.WIKIPEDIA_URL + entity),
+      success: function (data, textStatus, XMLHttpRequest){
+        var wiki_element = jetpack.tabs.focused.contentDocument.createElement("div");
+        wiki_element.innerHTML = data;
+        var paragraphs = $("#" + Wikipedia_service.constants.MAIN_CONTENT_ID, wiki_element);
+        $(update_element).html(paragraphs);
+        //var description_paragraph;
+        //for (var cont_par = 0; cont_par < paragraphs.size(); cont_par++){
+        //  if (paragraphs.get(cont_par).childNodes[0].nodeType == 3){
+        //    $(update_element).html(paragraphs.get(cont_par));
+        //    return ;
+        //  }
+        //}  
+      }
+    });
+
+    return "wikipedia"
+  }
+};
+
+/**
   * Textual_elaboration_service object
   *  - This object will interface each and every requests that
   *  are to be made to the Textual elaboration methods implemented.
   */
 var Textual_elaboration_service = {
+  constants: {
+    LEXICAL_ELABORATION_URL: "http://www.nilc.icmc.usp.br/~matheus/simplifica2/simplificador_lexico",
+    SINONIMOUS_URL: "http://www.nilc.icmc.usp.br/~matheus/simplifica2",
+    ERROR_SINONIMOUS: "NotFound!"
+  },
+  call_lexical_elaboration: function(text, document_current_tab){
+    var request = $.ajax({
+      type: "POST", 
+      data: ({texto: text}),
+      url: this.constants.LEXICAL_ELABORATION_URL,
+      error: function(XMLHttpRequest, textStatus){
+        Error_dialog(document_current_tab);
+      },
+      success: function(response){
+      
+        global_overlay.close();
+        
+        var div_lexical = jetpack.tabs.focused.contentDocument.createElement("div");
+        $(div_lexical).html(response).css({padding: "15px"});
+
+        //global_overlay = new Dialog(div_lexical, document_current_tab, "Lexical Test", {height: "90%", width: "90%", top: "5%", left: "5%"});
+        div_lexical = Textual_elaboration_service.format_to_html(div_lexical, document_current_tab);
+
+        try{
+          HTML_handler.merge_htmls(div_lexical, document_current_tab);
+        }catch(ex){
+          jetpack.notifications.show("terminando com erro" + ex);
+        }
+
+        var current_tab;
+        for(i in jetpack.tabs){
+          if(jetpack.tabs[i].contentDocument == document_current_tab)
+            current_tab = i;
+        }
+        if (current_tab && jetpack.tabs.focused != jetpack.tabs[current_tab]) 
+          jetpack.tabs[current_tab].raw.style.cssText = "-moz-apperance: none !important; color: #000000; background-color: rgb(255, 150, 0); border: 1px solid #000 !important;";
+        jetpack.notifications.show("O Facilita Educacional concluiu suas atividades na aba: " + document_current_tab.title);
+      }
+    });
+ 
+  },
+  format_to_html: function(div_text, document_current_tab){
+   $("a", div_text).css({
+    backgroundColor: "#FFDDBB"
+   }).each(function(count){
+    $(this).click(function(){
+      var container_div = jetpack.tabs.focused.contentDocument.createElement("div");
+      $(container_div).css({
+        padding: "15px"
+      });
   
+      var data_span = jetpack.tabs.focused.contentDocument.createElement("span");
+      $(data_span).attr({id: "lexical_tooltip"}).css({display: "none"}).html($(this).text()).appendTo(container_div);
+
+      var sinonimous_div = jetpack.tabs.focused.contentDocument.createElement("div");
+      $(sinonimous_div).html("Aguarde, carregando os sin&ocirc;nimos...").appendTo(container_div);
+      var loading_overlay = jetpack.tabs.focused.contentDocument.createElement("img");
+      $(loading_overlay).attr({
+        id: "loading_overlay",
+        alt: "Carregando",
+        src: "http://vinho.intermidia.icmc.usp.br/watinha/Educational-Facilita/loading3.gif"
+      });
+      $(sinonimous_div).append(loading_overlay);
+
+      if (global_overlay && global_overlay.overlay_div && $(this).text() == $("#lexical_tooltip", global_overlay.overlay_div).text()){
+        global_overlay.close();
+        global_overlay = false;
+        return false;
+      } 
+      
+      global_overlay = new Tooltip(container_div, document_current_tab, this);
+
+      var count_ajax = 0;
+      $.ajax({
+        type: "GET", 
+        url: (Textual_elaboration_service.constants.SINONIMOUS_URL + $(this).attr("href").substring(1)),
+        error: function(XMLHttpRequest, textStatus){
+          Error_dialog(document_current_tab);
+        },
+        success: function(response){
+          if (response.search(Textual_elaboration_service.constants.ERROR_SINONIMOUS) != -1)
+            response = "<h3>Tente novamente...</h3>";
+          
+          $(sinonimous_div).html(response);
+        }
+      });
+      return false;
+    });
+   });
+
+   return div_text;
+  }
 };
 
 /**
@@ -183,46 +337,65 @@ var Textual_elaboration_service = {
 var HTML_handler = {
   constants: {},
   merge_htmls: function(html, current_document){
-    var main_element = $("." + Educational_Facilita.constants.MAIN_ELEMENT_CLASS);
-    var entity_names = $("a." + (Rembrandt_service.constants.REMBRANDT_LINKS_CLASS), html);
+    var main_element = $("." + Educational_Facilita.constants.MAIN_ELEMENT_CLASS, current_document);
+    var entity_names = $("a", html); //." + (Rembrandt_service.constants.REMBRANDT_LINKS_CLASS), html);
     var cont_entity = 0;
+
+    var entity_not_found = [];
+    var last_node_found;
+
     /*
       Looking for elements inside the main element
     */
-    for (var nodeIndex = 0; (node = current_document.getElementsByTagName('*')[nodeIndex]); nodeIndex++){
+    for (var nodeIndex = 0; ((node = main_element.get(0).getElementsByTagName('*')[nodeIndex]) && cont_entity <= entity_names.size()); nodeIndex++){
       /*
         Looking for text nodes to find the expression to be remarked
       */
-      for (var child_index = 0; child_index < node.childNodes.length; child_index++){
-        if (node.childNodes[child_index].nodeType == 3){
-          var node_text = node.childNodes[child_index].nodeValue;
-          if (node_text.search($(entity_names.get(cont_entity)).text()) > -1){
-            if (node.nodeName == "A"){
-              if(! $(node).hasClass(Rembrandt_service.constants.REMBRANDT_LINKS_CLASS))
-                cont_entity++;
-              if (cont_entity == entity_names.size())
-                return ;
-            }else{
-              entity_str_index = node_text.search($(entity_names.get(cont_entity)).text());
-              var begin_text = current_document.createTextNode(node_text.substring(0, entity_str_index));
-              var end_text = current_document.createTextNode(node_text.substring(entity_str_index + $(entity_names.get(cont_entity)).text().length), node_text.length);
+      if (node.nodeName != "SCRIPT" && node.nodeName != "STYLE"){
+        for (var child_index = 0; child_index < node.childNodes.length; child_index++){
+          if (node.childNodes[child_index].nodeType == 3){
+            var node_text = node.childNodes[child_index].nodeValue;
+            var expression = $(entity_names.get(cont_entity)).text().replace(/\s+/g, " ").replace(/^\s+|\s+$/g,"");
+            var regular = new RegExp ( "^" + expression + "$|^" + expression + "\\W|\\W" + expression + "\\W|\\W" + expression + "$");
+            if (node_text.replace(/\s+/g, " ").search(regular) > -1){
+              if (node.nodeName == "A"){
+                if(!$(node).hasClass(Rembrandt_service.constants.REMBRANDT_LINKS_CLASS))
+                  cont_entity++;
+                if (cont_entity == entity_names.size()){
+                  for (var cont_not_found = 0; cont_not_found < entity_not_found.length; cont_not_found++)
+                    $(current_document.body).append("<h1>" + entity_names.get(entity_not_found[cont_not_found]).innerHTML.replace(/^\s+|\s+$/g, "") + "</h1>");
+                  return ;
+                }
+              }else{
+                entity_str_index = node_text.replace(/\s+/g, " ").search(regular);
+                var begin_text = current_document.createTextNode(node_text.replace(/\s+/g, " ").substring(0, entity_str_index));
+                var end_text = current_document.createTextNode(node_text.replace(/\s+/g, " ").substring(entity_str_index + $(entity_names.get(cont_entity)).text().replace(/\s+/g, " ").replace(/^\s+|\s+$/g,"").length + 1, node_text.replace(/\s+/g, " ").length));
 
-              node.childNodes[child_index].parentNode.replaceChild(end_text, node.childNodes[child_index]);
-              end_text.parentNode.insertBefore(begin_text, end_text);
-              end_text.parentNode.insertBefore(entity_names[cont_entity], end_text);
+                node.childNodes[child_index].parentNode.replaceChild(end_text, node.childNodes[child_index]);
+                end_text.parentNode.insertBefore(begin_text, end_text);
+                end_text.parentNode.insertBefore(entity_names[cont_entity], end_text);
 
-              //$(node.childNodes[child_index]).replaceWith(begin_text).after(entity_names.get(cont_entity)).after(end_text);
+                entity_names[cont_entity].innerHTML = " " + entity_names[cont_entity].innerHTML + " ";
 
-              //child_index++; // there is no need to recheck the begin of the text node, since the entity_names are ordered
-              //nodeIndex++; // now there ir one new non textual element in the tree so we need to skip it
-              cont_entity++; // keeping an eye for the remaining named entities
-              if(cont_entity == entity_names.size())
-                return ;
-            }
-          }//if 
-        }// if
-      }// text nodes 
+                cont_entity++; // keeping an eye for the remaining named entities
+                if(cont_entity == entity_names.size()){
+                  for (var cont_not_found = 0; cont_not_found < entity_not_found.length; cont_not_found++)
+                    $(current_document.body).append("<h1>" + entity_names.get(entity_not_found[cont_not_found]).innerHTML.replace(/^\s+|\s+$/g,"") + "</h1>");
+                  return ;
+                }
+              }
+              last_node_found = nodeIndex;
+            }//if 
+          }// if
+        }// text nodes
+      } // IF
+      if ((!(node = main_element.get(0).getElementsByTagName('*')[nodeIndex + 1])) && cont_entity < entity_names.size()){
+        entity_not_found.push(cont_entity++);
+        nodeIndex = last_node_found - 1;
+      }  
     }// all elements in the main element
+    for (var cont_not_found = 0; cont_not_found < entity_not_found.length; cont_not_found++)
+      $(current_document.body).append("<h1>" + entity_names.get(entity_not_found[cont_not_found]).innerHTML.replace(/^\s+|\s+$/g,"") + "</h1>");
   }
 };
 
@@ -270,6 +443,12 @@ Overlay.prototype.initialize = function(main_element, document_tab, options){
   */
   if (!options["left"])
     options["left"] = "25%";
+
+  /*
+    Option POSITION to determine the kind of positioning of the overlay
+  */
+  if (!options["position"])
+    options["position"] = "fixed";
     
   if (options["modal"] == "true"){
     this.modal_div = this.document_tab.createElement("div");
@@ -289,14 +468,13 @@ Overlay.prototype.initialize = function(main_element, document_tab, options){
   $(this.overlay_div).css({
     width: options["width"],
     height: options["height"],
-    position: "fixed",
+    position: options["position"],
     top: options["top"],
     left: options["left"],
     zIndex: 99999,
     opacity: 0.9,
     backgroundColor: "#FFFFFF",
-    MozBorderRadius: "10px",
-    overflow: "auto"
+    MozBorderRadius: "10px"
   });
   $(this.overlay_div).append(main_element);
 
@@ -304,7 +482,6 @@ Overlay.prototype.initialize = function(main_element, document_tab, options){
   $(this.container).attr({
     id: this.constants.OVERLAY_ID
   });
-  $(this.container).data('overlay', {caraca: this});
   $(this.container).append(this.overlay_div);
 
   if(this.modal_div)
@@ -318,7 +495,7 @@ Overlay.prototype.open = function(){
    */
   var active_overlay = $("#" + this.constants.OVERLAY_ID, this.document_tab);
   if(active_overlay.size() != 0){
-    active_overlay.fadeOut(1000, function(){
+    active_overlay.fadeOut(500, function(){
       $(this).remove();
     });
   }
@@ -333,18 +510,42 @@ Overlay.prototype.open = function(){
   $(this.container).css({opacity: 0});
   $(this.overlay_div).css({height: "0", opacity: 0});
   
-  $(this.container).fadeTo(750, 1, function(){
+  $(this.container).fadeTo(500, 1, function(){
     $(this.childNodes[0]).animate({
       height: overlay_height,
       opacity: 1
-    }, 750);
+    }, 500);
   });
 }
 Overlay.prototype.close = function(){
-  $(this.container).fadeTo(1000, 0, function(){
+  $(this.container).fadeTo(500, 0, function(){
     $(this).remove(); 
   });
 }
+/**
+  * Tooltip Object  
+  *  - Inserts a Tooltip right next to a specified element
+  *  reusing the overlay implementation
+  */
+function Tooltip(main_element, document_tab, activation_element){
+  this.initialize(main_element, document_tab, {height: "100%", width: "100%", top: " ", left: " ", position: "inherit", modal: "false"});
+  $(this.overlay_div).css({
+    MozBoxShadow: "10px 10px 5px #666",
+    borderTop: "solid 10px #FF9900",
+    borderBottom: "solid 10px #AAAAAA",
+    position: "relative",
+    borderLeft: "solid 3px #FFCC99",
+    borderRight: "solid 3px #FFCC99",
+    top: ($(activation_element).height() + 3 + "px"),
+    right: ($(activation_element).width() + "px"),
+    overflow: "hidden"
+  });
+  $(this.container).css({
+    display: "inline",
+    position: "absolute"
+  }).remove().insertAfter(activation_element);
+}
+Tooltip.prototype = new Overlay;
 /**
   * Dialog Object.
   *  - Inserts a Dialog in the page which is quite similar 
@@ -428,10 +629,10 @@ function Loading_dialog(document_tab){
   $(loading_overlay).attr({
     id: "loading_overlay",
     alt: "Carregando",
-    src: "http://localhost/~watinha/jquery/loading3.gif"
+    src: "http://vinho.intermidia.icmc.usp.br/watinha/Educational-Facilita/loading3.gif"
   });
 
- $(loading_overlay).wrap("<div style='position:absolute;top:40%;width:100%;text-align:center'></div>").after("<h2 style='font-size: 300%'>Aguarde...</h2>");
+  $(loading_overlay).wrap("<div style='position:absolute;top:40%;width:100%;text-align:center'></div>").after("<h2 style='font-size: 300%'>Aguarde...</h2>");
   
   this.initialize($(loading_overlay).parent(), document_tab);
 
@@ -442,6 +643,35 @@ function Loading_dialog(document_tab){
   });
 }
 Loading_dialog.prototype = new Overlay;
+
+/**
+  * Error_dialog function
+  *  - A simplistic way for reusing a error standard message
+  *
+  */
+
+function Error_dialog(document_tab){
+
+  var error_img = document_tab.createElement("img");
+  $(error_img).attr({
+    id: "error_img",
+    alt: "Ocorreu um erro na chamada",
+    src: "http://vinho.intermidia.icmc.usp.br/watinha/Educational-Facilita/disconnect.png"
+  });
+
+  $(error_img).wrap("<div style='position:absolute;top:40%;width:100%;text-align:center'></div>").after("<h2 style='font-size: 1.5em'>Ocorreu um erro de processamento no Facilita Educativo. Tente novamente...</h2>");
+        
+  global_overlay = new Dialog($(error_img).parent(), document_tab, "Erro na opera&ccedil;&atilde;o", {height: "60%", width: "60%", left: "20%", top: "20%"});
+
+  var current_tab;
+
+  for(i in jetpack.tabs){
+    if(jetpack.tabs[i].contentDocument == document_tab)
+      current_tab = i;
+  }
+  jetpack.tabs[current_tab].raw.style.cssText = "-moz-apperance: none !important; color: #000000; background-color: rgb(255, 50, 50); border: 1px solid #000 !important;";
+  jetpack.notifications.show("Ocorreu um erro no processamento do Facilita Educativo");
+}
 
 /*
  * Readability. An Arc90 Lab Experiment. 
@@ -836,14 +1066,26 @@ var readability = {
   *******************************************
   */
   to_text: function(element){
-    $("script", element).each(function(count){
-      this.innerHTML = "<!--" + this.innerHTML + "-->";
-    }); 
-    $("style", element).each(function(count){
-      this.innerHTML = "<!--" + this.innerHTML + "-->";
-    });
-    return $(element).text();
-  }
+
+    var text_content = "";
+    var elements = element.getElementsByTagName("*");
+    /*
+      Getting through all the elements above ELEMENT PARAM
+    */
+    for (var cont_elements = 0; cont_elements < elements.length; cont_elements++){
+      if (elements[cont_elements].nodeName != "SCRIPT" && elements[cont_elements].nodeName != "STYLE"){
+        var childs = elements[cont_elements].childNodes;
+        /*
+          Getting through all child elements and looking for text nodes
+        */
+        for (var cont_childs = 0; cont_childs < childs.length; cont_childs++){
+          if(childs[cont_childs].nodeType == 3)
+            text_content += " " + childs[cont_childs].nodeValue;
+        } // FOR
+      } // IF
+    } // FOR 
+    return text_content;
+  } 
 	
 };
 
