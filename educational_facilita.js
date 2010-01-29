@@ -6,7 +6,7 @@
   ***          Jr., Marcelo Adriano Amancio, Matheus de   ***
   ***          Oliveira and Jose Augusto Costa Martim     ***
   *** Contact: watinha@gmail.com                          ***
-  *** Last changes: 26/01/2010                            ***
+  *** Last changes: 28/01/2010                            ***
   ***********************************************************
 */
 /*
@@ -15,12 +15,12 @@
     - Version 0.2: Separating objects (Educational_Facilita, ui_manager and readability) accordingly to its functionality and inserting the JQuery UI module dinamically on websites.
     - Version 0.2.1: Removing the JQuery UI functionality due to the limitations of the reuse of code of this library and also developing Overlay and Dialog functions to replace the UI components of the JQuery UI.
     - Version 0.3: Inserting Rembrandt functionalities through REST and AJAX. In this version it is expected the delivery of a functional prototype of the application.
-    - Version 0.4: Adding the Lexical Elaboration functionality and fixing some issues in the presentation of the informations.
+    - Version 0.4: Adding the Lexical Elaboration functionality and fixing some issues in the presentation of the informations. ***
 */
 var global_overlay;
 
 var Educational_Facilita = {
-  version: "0.3",
+  version: "0.4",
   constants: {
     MAIN_ELEMENT_CLASS: "educational_facilita_main"
   },
@@ -169,10 +169,10 @@ var Rembrandt_service = {
             src: "http://vinho.intermidia.icmc.usp.br/watinha/Educational-Facilita/loading3.gif"
           });
           $(div_wiki).append(loading_overlay);
-          global_overlay = new Dialog(container_div, current_document, $(this).text(), {height: "70%", width: "70%", top: "15%", left: "15%"});
+          global_overlay = new Dialog(container_div, current_document, $(this).text(), {height: "50%", width: "50%", top: "25%", left: "25%"});
           Wikipedia_service.get_main_content($(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).WK, div_wiki);
         }else{
-          if (global_overlay && global_overlay.overlay_div && $($("p", global_overlay.overlay_div).get(0)).text() == $(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C){
+          if (global_overlay && global_overlay.overlay_div && $("p", global_overlay.overlay_div).size() != 0 && $($("p", global_overlay.overlay_div).get(0)).text() == $(this).data(Rembrandt_service.constants.REMBRANDT_LINKS_DATA).C){
             global_overlay.close();
             global_overlay = false;
             return false;
@@ -183,7 +183,6 @@ var Rembrandt_service = {
           });
           global_overlay = new Tooltip(container_div, current_document, this);
         }
-        
         return false;
       });
       $(this).replaceWith(rembrandt_link);
@@ -204,6 +203,9 @@ var Wikipedia_service = {
     WIKIPEDIA_URL: "http://pt.wikipedia.org/wiki/",
     MAIN_CONTENT_ID: "bodyContent"
   }, 
+  regexps: {
+    MAIN_PARAGRAPH: /^Nota/i
+  },
   get_main_content: function(entity, update_element){
   
     $.ajax({
@@ -212,15 +214,15 @@ var Wikipedia_service = {
       success: function (data, textStatus, XMLHttpRequest){
         var wiki_element = jetpack.tabs.focused.contentDocument.createElement("div");
         wiki_element.innerHTML = data;
-        var paragraphs = $("#" + Wikipedia_service.constants.MAIN_CONTENT_ID, wiki_element);
-        $(update_element).html(paragraphs);
-        //var description_paragraph;
-        //for (var cont_par = 0; cont_par < paragraphs.size(); cont_par++){
-        //  if (paragraphs.get(cont_par).childNodes[0].nodeType == 3){
-        //    $(update_element).html(paragraphs.get(cont_par));
-        //    return ;
-        //  }
-        //}  
+        var paragraphs = $("#" + Wikipedia_service.constants.MAIN_CONTENT_ID + " > p", wiki_element);
+        //$(update_element).html(paragraphs);
+        var description_paragraph;
+        for (var cont_par = 0; cont_par < paragraphs.size(); cont_par++){
+          if ($(paragraphs.get(cont_par)).text().replace(/^\s+|\s+$/g,"").search(Wikipedia_service.regexps.MAIN_PARAGRAPH) != 0 && $(paragraphs.get(cont_par)).text().replace(/^\s+|\s+$/g,"") != ""){
+            $(update_element).html(paragraphs.get(cont_par));
+            return ;
+          }
+        }  
       }
     });
 
@@ -249,8 +251,6 @@ var Textual_elaboration_service = {
       },
       success: function(response){
       
-        global_overlay.close();
-        
         var div_lexical = jetpack.tabs.focused.contentDocument.createElement("div");
         $(div_lexical).html(response).css({padding: "15px"});
 
@@ -262,6 +262,7 @@ var Textual_elaboration_service = {
         }catch(ex){
           jetpack.notifications.show("terminando com erro" + ex);
         }
+        global_overlay.close();
 
         var current_tab;
         for(i in jetpack.tabs){
@@ -315,7 +316,7 @@ var Textual_elaboration_service = {
         },
         success: function(response){
           if (response.search(Textual_elaboration_service.constants.ERROR_SINONIMOUS) != -1)
-            response = "<h3>Tente novamente...</h3>";
+            response = "<h3>N&atilde;o h&aacute; sin&ocirc;nimos dispon&iacute;veis para essa palavra...</h3>";
           
           $(sinonimous_div).html(response);
         }
